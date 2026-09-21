@@ -9,6 +9,8 @@ def format_currency(value):
 
 
 def list_products(products):
+   max_id = max(product['id'] for product in products)
+
    for idx, product in enumerate(products): # or (products, 1)
       
       name = product['name']
@@ -16,6 +18,7 @@ def list_products(products):
       quantity = product['quantity']
 
       print(f"{idx+1}) {name} \t {price} \t {quantity:<5}")
+
 
 
 
