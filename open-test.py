@@ -1,7 +1,7 @@
 import csv
 import subprocess
 import locale
-
+import sqlite3
 
 def format_currency(value):
    return locale.currency(value,grouping=True)
@@ -44,26 +44,85 @@ def remove_product(idx, products):
 def load_data(filename): 
    products = []           #lista
    
-   with open(filename, 'r') as file: #öppnar en fil med read-rättighet
-      reader = csv.DictReader(file)
-      for row in reader:
-         id = int(row['id'])
-         name = row['name']
-         desc = row['desc']
-         price = float(row['price'])
-         quantity = int(row['quantity'])
-         
-         products.append(
-               {                   
-                  "id": id,       
-                  "name": name,
-                  "desc": desc,
-                  "price": price,
-                  "quantity": quantity
-               }
+   with sqlite3.connect(filename) as conn:
+      conn.execute("""
+         CREATE TABLE IF NOT EXISTS products (
+            id INTEGER PRIMARY KEY,
+            name TEXT NOT NULL,
+            desc TEXT,
+            price REAL NOT NULL,
+            quantity INTEGER NOT NULL
          )
+      """)
+
+      rows = conn.execute(
+         "SELECT id, name, desc, price, quantity FROM products ORDER BY id"
+      ).fetchall()
+
+   for row in rows:
+      products.append(
+         {
+            "id": row[0],
+            "name": row[1],
+            "desc": row[2],
+            "price": row[3],
+            "quantity": row[4]
+         }
+      )
+
+   if not products:
+      with open(filename.replace('.db', '.csv'), 'r') as file: #öppnar en fil med read-rättighet
+         reader = csv.DictReader(file)
+         for row in reader:
+            id = int(row['id'])
+            name = row['name']
+            desc = row['desc']
+            price = float(row['price'])
+            quantity = int(row['quantity'])
+            
+            products.append(
+                  {                   
+                     "id": id,       
+                     "name": name,
+                     "desc": desc,
+                     "price": price,
+                     "quantity": quantity
+                  }
+            )
+
+      save_data(products)
          
    return products
+
+
+def save_data(products):
+   with sqlite3.connect('db_products.db') as conn:
+      conn.execute("""
+         CREATE TABLE IF NOT EXISTS products (
+            id INTEGER PRIMARY KEY,
+            name TEXT NOT NULL,
+            desc TEXT,
+            price REAL NOT NULL,
+            quantity INTEGER NOT NULL
+         )
+      """)
+
+      conn.execute("DELETE FROM products")
+
+      for product in products:
+         conn.execute(
+            """
+            INSERT INTO products (id, name, desc, price, quantity)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+               product['id'],
+               product['name'],
+               product['desc'],
+               product['price'],
+               product['quantity']
+            )
+         )
 
 
 
@@ -80,7 +139,7 @@ locale.setlocale(locale.LC_ALL, 'sv_SE.UTF-8')
 
 subprocess.run('cls',shell=True)
 
-products = load_data('db_products.csv')
+products = load_data('db_products.db')
 
 
 while True:
@@ -112,7 +171,7 @@ while True:
          quantity = int(input("Ange produktens kvantitet: "))
 
          new_product = {
-            "id": len(products) + 1,
+            "id": max([product['id'] for product in products], default=0) + 1,
             "name": name,
             "desc": desc,
             "price": price,
@@ -120,13 +179,14 @@ while True:
          }
 
          products.append(new_product)
+         save_data(products)
          print(f"Produkten '{name}' har lagts till.")
 
       elif option.upper() == 'T':
-
          which = int(input("Vilken produkt vill du ta bort? (Ange produktens nummer): "))
 
          print(remove_product(which, products))
+         save_data(products)
 
       elif option.upper() == 'E':
          which = int(input("Vilken produkt vill du ändra? (Ange produktens nummer): "))
@@ -154,6 +214,7 @@ while True:
             if new_quantity_input:
                product['quantity'] = int(new_quantity_input)
 
+            save_data(products)
             print(f"Produkten '{product['name']}' har uppdaterats.")
          else:
             print("Produkten finns inte.")
